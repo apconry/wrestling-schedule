@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Conry Wrestling Schedule</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <style>
+    :root {
+      font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #020617;
+      color: #e5e7eb;
+    }
+    header {
+      padding: 14px 16px 8px;
+      background: #111827;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .sub {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .controls {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .controls input[type="search"] {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: none;
+      outline: none;
+      font-size: 14px;
+      background: #020617;
+      color: #e5e7eb;
+      box-shadow: inset 0 0 0 1px #374151;
+    }
+    .controls button {
+      border-radius: 999px;
+      border: none;
+      padding: 7px 10px;
+      font-size: 12px;
+      background: #1d4ed8;
+      color: #e5e7eb;
+      font-weight: 600;
+    }
+    main {
+      padding: 10px 10px 30px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      background: #111827;
+      color: #9ca3af;
+      margin-right: 4px;
+    }
+    .card {
+      background: #020617;
+      border-radius: 14px;
+      padding: 10px 12px 8px;
+      margin-bottom: 10px;
+      box-shadow: 0 6px 16px rgba(15,23,42,0.9);
+      border: 1px solid #1f2937;
+    }
+    .date-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 4px;
+    }
+    .date-main {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .dow {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+    .title {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 4px 0 6px;
+      color: #e5e7eb;
+    }
+    .meta {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-bottom: 6px;
+    }
+    .meta strong {
+      color: #e5e7eb;
+    }
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      font-size: 11px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      background: #1e40af;
+      color: #e5e7eb;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      text-decoration: none;
+    }
+    .btn.secondary {
+      background: #111827;
+      color: #e5e7eb;
+      box-shadow: inset 0 0 0 1px #374151;
+    }
+    .btn span.icon {
+      font-size: 13px;
+    }
+    .pill-state {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #172554;
+      color: #e5e7eb;
+    }
+    .empty {
+      margin-top: 30px;
+      text-align: center;
+      color: #9ca3af;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Conry Wrestling Schedule</h1>
+    <div class="sub">Tap cards for map, website, and Add-to-Calendar links.</div>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search by event, city, or state…" />
+      <button id="toggleUpcoming">Upcoming</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <div class="empty">Loading schedule…</div>
+  </main>
+
+<script>
+  // 1) CHANGE THIS to your published CSV URL if you ever change sheets
+  const CSV_URL =
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vS8g-STUBZQHwhcDpaNq6Vc0R79MK64QjLznBrgbtqQBaRIC9-FZ9xeuJ1jrV78-d56WytN62BJ29o-/pub?gid=2093002708&single=true&output=csv";
+
+  // Expected columns: Start Date, Tournament Info/Name, State, Location, Address, Link, [Ages?]
+
+  // --- Small CSV parser that handles quotes and commas ---
+  function parseCSV(text) {
+    const rows = [];
+    let row = [];
+    let value = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      const next = text[i + 1];
+
+      if (inQuotes) {
+        if (c === '"' && next === '"') {
+          value += '"';
+          i++;
+        } else if (c === '"') {
+          inQuotes = false;
+        } else {
+          value += c;
+        }
+      } else {
+        if (c === '"') {
+          inQuotes = true;
+        } else if (c === ",") {
+          row.push(value.trim());
+          value = "";
+        } else if (c === "\r") {
+          continue;
+        } else if (c === "\n") {
+          row.push(value.trim());
+          rows.push(row);
+          row = [];
+          value = "";
+        } else {
+          value += c;
+        }
+      }
+    }
+    if (value.length || row.length) {
+      row.push(value.trim());
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  function toDate(val) {
+    if (!val) return null;
+    // Allow both real dates and text like "10/22/2025"
+    const d = new Date(val);
+    if (!isNaN(d)) return d;
+    const parts = val.split("/");
+    if (parts.length === 3) {
+      return new Date(parts[2], parts[0]-1, parts[1]);
+    }
+    return null;
+  }
+
+  function formatDate(d) {
+    return d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+  }
+  function dayOfWeek(d) {
+    return d.toLocaleDateString(undefined, { weekday: "short" });
+  }
+
+  function buildCalendarLink(row) {
+    const d = row.dateObj;
+    if (!d) return null;
+    const y = d.getFullYear().toString().padStart(4, "0");
+    const m = (d.getMonth()+1).toString().padStart(2, "0");
+    const day = d.getDate().toString().padStart(2, "0");
+    const start = `${y}${m}${day}T070000`;
+    const end   = `${y}${m}${day}T170000`;
+
+    const title = encodeURIComponent(row.name || "Wrestling Tournament");
+    const details = encodeURIComponent(`Tournament: ${row.name} at ${row.location}`);
+    const loc = encodeURIComponent(row.address || row.location || "");
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${loc}`;
+  }
+
+  function buildMapsLink(address) {
+    if (!address) return null;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  }
+
+  function render(events, {searchTerm = "", upcomingOnly = false} = {}) {
+    const app = document.getElementById("app");
+    app.innerHTML = "";
+
+    const now = new Date();
+    const term = searchTerm.trim().toLowerCase();
+
+    const filtered = events.filter(ev => {
+      if (upcomingOnly && ev.dateObj && ev.dateObj < new Date(now.toDateString())) {
+        return false;
+      }
+      if (!term) return true;
+      const hay = `${ev.name} ${ev.state} ${ev.location} ${ev.address}`.toLowerCase();
+      return hay.includes(term);
+    });
+
+    if (!filtered.length) {
+      app.innerHTML = `<div class="empty">No tournaments match your filter yet.</div>`;
+      return;
+    }
+
+    filtered.forEach(ev => {
+      const calLink = buildCalendarLink(ev);
+      const maps = buildMapsLink(ev.address);
+      const eventLink = ev.link || "";
+
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const dateRow = document.createElement("div");
+      dateRow.className = "date-row";
+
+      const left = document.createElement("div");
+      left.innerHTML = ev.dateObj
+        ? `<div class="date-main">${formatDate(ev.dateObj)}</div>
+           <div class="dow">${dayOfWeek(ev.dateObj)}</div>`
+        : `<div class="date-main">Date TBA</div>`;
+
+      const right = document.createElement("div");
+      right.innerHTML = ev.state ? `<span class="pill-state">${ev.state}</span>` : "";
+
+      dateRow.appendChild(left);
+      dateRow.appendChild(right);
+
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = ev.name || "Tournament";
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.innerHTML = `
+        ${ev.location ? `<strong>${ev.location}</strong><br>` : ""}
+        ${ev.address || ""}
+      `;
+
+      const btnRow = document.createElement("div");
+      btnRow.className = "btn-row";
+
+      if (eventLink) {
+        const a = document.createElement("a");
+        a.className = "btn";
+        a.href = eventLink;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.innerHTML = `<span class="icon">🌐</span> Event Page`;
+        btnRow.appendChild(a);
+      }
+
+      if (maps) {
+        const m = document.createElement("a");
+        m.className = "btn secondary";
+        m.href = maps;
+        m.target = "_blank";
+        m.rel = "noopener";
+        m.innerHTML = `<span class="icon">📍</span> Maps`;
+        btnRow.appendChild(m);
+      }
+
+      if (calLink) {
+        const c = document.createElement("a");
+        c.className = "btn secondary";
+        c.href = calLink;
+        c.target = "_blank";
+        c.rel = "noopener";
+        c.innerHTML = `<span class="icon">🗓</span> Add to Calendar`;
+        btnRow.appendChild(c);
+      }
+
+      card.appendChild(dateRow);
+      card.appendChild(title);
+      card.appendChild(meta);
+      card.appendChild(btnRow);
+
+      app.appendChild(card);
+    });
+  }
+
+  async function init() {
+    try {
+      const res = await fetch(CSV_URL);
+      const text = await res.text();
+      const rows = parseCSV(text);
+      const [header, ...data] = rows;
+
+      // Find column indices
+      const idx = {
+        date: header.findIndex(h => h.toLowerCase().includes("start date") || h.toLowerCase().includes("date")),
+        name: header.findIndex(h => h.toLowerCase().includes("tournament")),
+        state: header.findIndex(h => h.toLowerCase().includes("state")),
+        location: header.findIndex(h => h.toLowerCase().includes("location")),
+        address: header.findIndex(h => h.toLowerCase().includes("address")),
+        link: header.findIndex(h => h.toLowerCase().includes("link"))
+      };
+
+      const events = data
+        .filter(row => row.some(v => v && v.trim() !== ""))
+        .map(row => {
+          const dateVal = idx.date >= 0 ? row[idx.date] : "";
+          const d = toDate(dateVal);
+          return {
+            rawDate: dateVal,
+            dateObj: d,
+            name: idx.name >= 0 ? row[idx.name] : "",
+            state: idx.state >= 0 ? row[idx.state] : "",
+            location: idx.location >= 0 ? row[idx.location] : "",
+            address: idx.address >= 0 ? row[idx.address] : "",
+            link: idx.link >= 0 ? row[idx.link] : ""
+          };
+        })
+        .sort((a,b) => {
+          if (!a.dateObj || !b.dateObj) return 0;
+          return a.dateObj - b.dateObj;
+        });
+
+      window._events = events;
+      render(events);
+
+      const search = document.getElementById("search");
+      const toggle = document.getElementById("toggleUpcoming");
+      let upcomingOnly = true;
+      toggle.classList.add("active");
+
+      search.addEventListener("input", () => {
+        render(window._events, {searchTerm: search.value, upcomingOnly});
+      });
+
+      toggle.addEventListener("click", () => {
+        upcomingOnly = !upcomingOnly;
+        toggle.textContent = upcomingOnly ? "Upcoming" : "All";
+        render(window._events, {searchTerm: search.value, upcomingOnly});
+      });
+    } catch (err) {
+      console.error(err);
+      document.getElementById("app").innerHTML =
+        `<div class="empty">Could not load schedule. Check the CSV URL.</div>`;
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>
